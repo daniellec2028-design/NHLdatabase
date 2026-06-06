@@ -12,8 +12,6 @@ public class Main {
         int[] colWidths = new int[cols];
         //initialize column widths with header lengths
         for (int i=0; i < cols; i++) {
-            //note: the colWidths array has indices ranging from 0 to cols-1
-            //but the columns in the result set are labeled from 1 to cols
             colWidths[i] = metaData.getColumnLabel(i+1).length();
         }
         //loop through results to get maximum lengths in each column
@@ -51,40 +49,88 @@ public class Main {
         System.out.print("(the sakila database in this case), ");
         System.out.println("run a query, and display the results.");
         System.out.println("\nWhat would you like to do?");
-        System.out.println("1. Run the sample query.");
-        System.out.println("2. Enter a query and run it.");
-        System.out.println("3. Quit");
+        System.out.println("1. List all players.");
+        System.out.println("2. Search for a player.");
+        System.out.println("3. List out all NHL teams.");
+        System.out.println("4. Search for a team.");
+        System.out.println("5. Find a goalie.");
+        System.out.println("9. Quit");
     }
 
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         try {
-            //you can replace the sample database here with your own
-            Connection conn = DriverManager.getConnection("jdbc:sqlite:sakila_master.db");
-            while (true) {      //repeats forever until user chooses to quit
-                //sample query
-                String sql = "SELECT f.title AS film_title, a.first_name, a.last_name "
-                        + " FROM actor AS a "
-                        + " INNER JOIN film_actor AS af ON af.actor_id=a.actor_id"
-                        + " INNER JOIN film AS f ON f.film_id = af.film_id"
-                        + " ORDER BY f.title, a.first_name";
+            Connection conn = DriverManager.getConnection("jdbc:sqlite:NHL.db");
+            while (true) {
                 printMenu();
                 String s = sc.nextLine();
 
                 if (s.startsWith("1")) {
-                    //run the sample query directly
+                    String sql = "SELECT firstName,lastName,primaryPosition FROM player";
                     runSQLandPrint(sql, conn);
 
                 } else if (s.startsWith("2")) {
-                    //ask the user for a new query
-                    System.out.print("Enter SQL (in one line): ");
-                    sql = sc.nextLine();
+                    System.out.print("Enter a player's name: ");
+                    String name = sc.nextLine();
+                    String sql = "SELECT * "
+                            + "FROM player WHERE concat(firstName, ' ', lastName)='"
+                            + name + "'";
                     runSQLandPrint(sql, conn);
 
-                } else if (s.startsWith("3")) {
-                    //user chose to quit, so exit the loop
-                    break;
+                    sql = "SELECT p.firstName, p.lastName, p.primaryPosition, " +
+                            "s.total_goals, s.total_assists\n" +
+                            "FROM player AS p\n" +
+                            "INNER JOIN (SELECT player_id, SUM(goals) AS total_goals, " +
+                            "SUM(assists) AS total_assists\n" +
+                            "FROM game_skater_stats AS s\n" +
+                            "GROUP BY player_id) AS s\n" +
+                            "USING (player_id) WHERE concat(firstName, ' ', lastName)='"
+                            + name + "'";
+                    runSQLandPrint(sql, conn);
+                }
+                if (s.startsWith("3")) {
+                    String sql = "SELECT city,teamName,abbreviation FROM team";
+                    runSQLandPrint(sql, conn);
+                } else if (s.startsWith("4")) {
+                    System.out.print("Enter a team's name: ");
+                    String name = sc.nextLine();
+                    String sql = "SELECT * "
+                            + "FROM team WHERE teamName='"
+                            + name + "'";
+                    runSQLandPrint(sql, conn);
+                } else if (s.startsWith("5")) {
+                    System.out.print("Enter a goalie's name: ");
+                    String name = sc.nextLine();
 
+                    String sql = "SELECT p.firstName, p.lastName, p.primaryPosition, s.saves, " +
+                            "s.savePercentage\n" +
+                            "FROM player AS p\n" +
+                            "INNER JOIN (\n" +
+                            "    SELECT player_id, SUM(saves) AS saves, AVG(savePercentage) AS savePercentage\n" +
+                            "    FROM goalie_stats\n" +
+                            "    GROUP BY player_id\n" +
+                            ") AS s\n" +
+                            "USING (player_id) WHERE concat(firstName, ' ', lastName)='"
+                            + name + "'";
+
+                    // --- CHANGED LOGIC START ---
+                    // Create a statement to check if the query returns any records before printing
+                    Statement checkStmt = conn.createStatement();
+                    ResultSet checkRs = checkStmt.executeQuery(sql);
+
+                    if (!checkRs.next()) {
+                        // If there is no first row, the goalie does not exist or has no goalie stats
+                        System.out.println("Goalie not found.");
+                    } else {
+                        // If data exists, pass the query to your existing printing engine
+                        runSQLandPrint(sql, conn);
+                    }
+                    checkRs.close();
+                    checkStmt.close();
+                    // --- CHANGED LOGIC END ---
+
+                } else if (s.startsWith("9")) {
+                    break;
                 } else {
                     System.out.println("Choice not recognized.");
                 }
